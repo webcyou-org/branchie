@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import Login from "./components/Login.vue";
+import Clone from "./components/Clone.vue";
 
 interface Branch {
     id: string;
@@ -38,6 +40,8 @@ const isDarkMode = ref(
 const menuOpen = ref(false);
 const currentTab = ref("history");
 const currentBranch = ref("main");
+const isAuthenticated = ref(false);
+const isRepositoryCloned = ref(false);
 
 const branches = ref<Branch[]>([
     { id: "main", name: "main", isActive: true },
@@ -97,10 +101,30 @@ const selectBranch = (branchId: string) => {
         isActive: branch.id === branchId,
     }));
 };
+
+const handleLogin = async (credentials: {
+    username: string;
+    password: string;
+}) => {
+    // TODO: 実際の認証処理を実装
+    console.log("Login credentials:", credentials);
+    isAuthenticated.value = true;
+};
+
+const handleClone = async (data: {
+    repositoryUrl: string;
+    localPath: string;
+}) => {
+    // TODO: 実際のクローン処理を実装
+    console.log("Clone data:", data);
+    isRepositoryCloned.value = true;
+};
 </script>
 
 <template>
-    <div class="app-container" :class="{ 'dark-mode': isDarkMode }">
+    <Login v-if="!isAuthenticated" @login="handleLogin" />
+    <Clone v-else-if="!isRepositoryCloned" @clone="handleClone" />
+    <div v-else class="app-container" :class="{ 'dark-mode': isDarkMode }">
         <header class="header">
             <div class="header-main">
                 <div class="header-left">
