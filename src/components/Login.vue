@@ -1,19 +1,70 @@
 <script setup lang="ts">
-import { ref, defineEmits } from "vue";
+import { ref, defineEmits, onMounted } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 
 const emit = defineEmits<{
     (e: "login", credentials: { username: string; password: string }): void;
 }>();
 
-const username = ref("");
+const username = ref(localStorage.getItem("lastUsername") || "");
 const password = ref("");
+const error = ref("");
+const isLoading = ref(false);
 
-const handleSubmit = () => {
-    emit("login", {
-        username: username.value,
-        password: password.value,
-    });
+const handleSubmit = async () => {
+    try {
+        isLoading.value = true;
+        error.value = "";
+
+        // 認証情報をキーチェーンに保存
+        await invoke("save_credentials", {
+            credentials: {
+                username: username.value,
+                password: password.value,
+            },
+        });
+
+        // 最後に使用したユーザー名を保存
+        localStorage.setItem("lastUsername", username.value);
+
+        // 親コンポーネントに認証情報を渡す
+        emit("login", {
+            username: username.value,
+            password: password.value,
+        });
+    } catch (e) {
+        error.value =
+            e instanceof Error ? e.message : "認証情報の保存に失敗しました";
+    } finally {
+        isLoading.value = false;
+    }
 };
+
+// コンポーネントマウント時にキーチェーンから認証情報を取得
+onMounted(async () => {
+    if (!username.value) return;
+
+    try {
+        isLoading.value = true;
+        // キーチェーンから認証情報を取得
+        const savedPassword = await invoke<string>("get_credentials", {
+            username: username.value,
+        });
+
+        if (savedPassword) {
+            // 認証情報が見つかった場合、自動的にログイン
+            emit("login", {
+                username: username.value,
+                password: savedPassword,
+            });
+        }
+    } catch (e) {
+        // エラーは無視（認証情報が存在しない場合）
+        console.log("認証情報が見つかりませんでした");
+    } finally {
+        isLoading.value = false;
+    }
+});
 </script>
 
 <template>
@@ -70,6 +121,7 @@ const handleSubmit = () => {
                             type="text"
                             placeholder="Enter username"
                             required
+                            :disabled="isLoading"
                         />
                     </div>
                 </div>
@@ -105,11 +157,23 @@ const handleSubmit = () => {
                             type="password"
                             placeholder="Enter password"
                             required
+                            :disabled="isLoading"
                         />
                     </div>
                 </div>
 
-                <button type="submit" class="login-button">Login</button>
+                <div v-if="error" class="error-message">
+                    {{ error }}
+                </div>
+
+                <button
+                    type="submit"
+                    class="login-button"
+                    :disabled="isLoading"
+                >
+                    <span v-if="isLoading">Loading...</span>
+                    <span v-else>Login</span>
+                </button>
             </form>
         </div>
     </div>
@@ -232,5 +296,11 @@ const handleSubmit = () => {
 
 .login-button:active {
     background-color: #0c8a5f;
+}
+
+.error-message {
+    color: #ef4444;
+    margin-bottom: 1rem;
+    text-align: center;
 }
 </style> 
