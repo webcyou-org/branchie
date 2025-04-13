@@ -51,11 +51,28 @@ const handleSubmit = async () => {
             throw new Error("指定されたパスには既にGitリポジトリが存在します");
         }
 
+        // localStorageからlastUsernameを取得
+        const lastUsername = localStorage.getItem("lastUsername");
+        if (!lastUsername) {
+            throw new Error(
+                "ログイン情報が見つかりません。ログインしてください。"
+            );
+        }
+
+        // リポジトリをクローン
+        const result = await invoke<string>("clone_repository", {
+            url: repositoryUrl.value,
+            path: localPath.value,
+            username: lastUsername,
+        });
+        console.log("クローン結果:", result);
+
         emit("clone", {
             repositoryUrl: repositoryUrl.value,
             localPath: localPath.value,
         });
     } catch (e) {
+        console.error("クローンエラー:", e);
         error.value = e instanceof Error ? e.message : "エラーが発生しました";
     } finally {
         isLoading.value = false;
@@ -75,12 +92,6 @@ const handleBrowse = async () => {
     const selected = await open({
         multiple: false,
         directory: true,
-        // filters: [
-        //     {
-        //         name: "All",
-        //         extensions: ["*"],
-        //     },
-        // ],
     });
     if (selected) {
         localPath.value = selected;
