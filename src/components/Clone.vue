@@ -1,13 +1,24 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 
 const emit = defineEmits<{
     (e: "clone", data: { repositoryUrl: string; localPath: string }): void;
 }>();
 
 const repositoryUrl = ref("");
-const localPath = ref("/Users/username/Projects");
+const localPath = ref("");
 const showAdvancedOptions = ref(false);
+
+// コンポーネントマウント時にデフォルトのリポジトリパスを取得
+onMounted(async () => {
+    try {
+        const defaultPath = await invoke<string>("get_default_repository_path");
+        localPath.value = defaultPath;
+    } catch (e) {
+        console.error("デフォルトのリポジトリパスの取得に失敗しました:", e);
+    }
+});
 
 const handleSubmit = () => {
     emit("clone", {
