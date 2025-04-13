@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 
 const emit = defineEmits<{
     (e: "clone", data: { repositoryUrl: string; localPath: string }): void;
@@ -9,6 +10,8 @@ const emit = defineEmits<{
 const repositoryUrl = ref("");
 const localPath = ref("");
 const showAdvancedOptions = ref(false);
+const error = ref("");
+const isLoading = ref(false);
 
 // コンポーネントマウント時にデフォルトのリポジトリパスを取得
 onMounted(async () => {
@@ -20,16 +23,68 @@ onMounted(async () => {
     }
 });
 
-const handleSubmit = () => {
-    emit("clone", {
-        repositoryUrl: repositoryUrl.value,
-        localPath: localPath.value,
-    });
+const handleSubmit = async () => {
+    try {
+        isLoading.value = true;
+        error.value = "";
+
+        // リポジトリURLのバリデーション
+        if (!repositoryUrl.value) {
+            throw new Error("リポジトリURLを入力してください");
+        }
+
+        // ローカルパスのバリデーション
+        const isValid = await invoke<boolean>("validate_repository_path", {
+            path: localPath.value,
+        });
+
+        if (!isValid) {
+            throw new Error("無効なローカルパスです");
+        }
+
+        // リポジトリの存在チェック
+        const exists = await invoke<boolean>("check_repository_exists", {
+            path: localPath.value,
+        });
+
+        if (exists) {
+            throw new Error("指定されたパスには既にGitリポジトリが存在します");
+        }
+
+        emit("clone", {
+            repositoryUrl: repositoryUrl.value,
+            localPath: localPath.value,
+        });
+    } catch (e) {
+        error.value = e instanceof Error ? e.message : "エラーが発生しました";
+    } finally {
+        isLoading.value = false;
+    }
 };
 
-const handleBrowse = () => {
-    // TODO: ディレクトリ選択ダイアログの実装
-    console.log("Browse directory");
+const handleBrowse = async () => {
+    // try {
+    //     const selectedPath = await invoke<string>("select_directory");
+    //     if (selectedPath) {
+    //         localPath.value = selectedPath;
+    //     }
+    // } catch (e) {
+    //     error.value =
+    //         e instanceof Error ? e.message : "ディレクトリの選択に失敗しました";
+    // }
+    const selected = await open({
+        multiple: false,
+        directory: true,
+        // filters: [
+        //     {
+        //         name: "All",
+        //         extensions: ["*"],
+        //     },
+        // ],
+    });
+    if (selected) {
+        localPath.value = selected;
+    }
 };
 </script>
 
@@ -58,6 +113,10 @@ const handleBrowse = () => {
             </div>
 
             <form class="clone-form" @submit.prevent="handleSubmit">
+                <div v-if="error" class="error-message">
+                    {{ error }}
+                </div>
+
                 <div class="form-group">
                     <label for="repository-url">Repository URL</label>
                     <div class="input-wrapper">
@@ -89,6 +148,7 @@ const handleBrowse = () => {
                             type="text"
                             placeholder="https://github.com/username/repository.git"
                             required
+                            :disabled="isLoading"
                         />
                     </div>
                 </div>
@@ -116,12 +176,14 @@ const handleBrowse = () => {
                                 type="text"
                                 placeholder="/Users/username/Projects"
                                 required
+                                :disabled="isLoading"
                             />
                         </div>
                         <button
                             type="button"
                             class="btn btn-secondary browse-button"
                             @click="handleBrowse"
+                            :disabled="isLoading"
                         >
                             <svg
                                 width="20"
@@ -146,6 +208,7 @@ const handleBrowse = () => {
                         type="button"
                         class="advanced-toggle"
                         @click="showAdvancedOptions = !showAdvancedOptions"
+                        :disabled="isLoading"
                     >
                         <svg
                             width="16"
@@ -167,7 +230,14 @@ const handleBrowse = () => {
                     </button>
                 </div>
 
-                <button type="submit" class="clone-button">Clone</button>
+                <button
+                    type="submit"
+                    class="clone-button"
+                    :disabled="isLoading"
+                >
+                    <span v-if="isLoading">Loading...</span>
+                    <span v-else>Clone</span>
+                </button>
             </form>
         </div>
     </div>
@@ -334,5 +404,12 @@ const handleBrowse = () => {
 
 .clone-button:active {
     background-color: #0c8a5f;
+}
+
+.error-message {
+    color: #ef4444;
+    margin-bottom: 1rem;
+    text-align: center;
+    font-size: 0.875rem;
 }
 </style> 
